@@ -1,3 +1,4 @@
+...
 Constants and variables
 CONSTANTS
   PRESENT_THRESHOLD <- 75          // Integer, minimum attendance %
@@ -140,3 +141,4 @@ PROCEDURE generateReport(register, className, schoolDate)
   DISPLAY "Class average:", round(classAverage), "%"
   DISPLAY "Pupils at risk:", atRiskCount
 END PROCEDURE
+...
