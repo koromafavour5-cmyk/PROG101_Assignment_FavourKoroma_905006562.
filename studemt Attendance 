@@ -1,0 +1,142 @@
+Constants and variables
+CONSTANTS
+  PRESENT_THRESHOLD <- 75          // Integer, minimum attendance %
+  SCHOOL_DAYS_PER_WEEK <- 5        // Integer
+VARIABLES
+  className : String
+  schoolDate : String              // format YYYY-MM-DD
+  register : Array of Student
+  atRiskList : Array of Student
+  anotherClass : Boolean
+RECORD Student
+  studentID : Integer
+  fullName : String
+  guardianPhone : String
+  status : String                  // "Present", "Absent" or "Late"
+  daysPresent, daysLate, daysAbsent : Integer
+  rate : Real
+  isAtRisk : Boolean
+Main program
+BEGIN MAIN
+  DISPLAY "SchoolPresent SL - Attendance Tracking"
+  REPEAT
+    INPUT className, schoolDate
+    register <- loadRegister(className)
+    IF length(register) = 0 THEN
+      DISPLAY "Class not found. Please check the class name."
+    ELSE
+      CALL recordAttendance(register)
+      atRiskList <- analyseAttendance(register)
+      IF length(atRiskList) > 0 THEN
+        CALL notifyGuardians(atRiskList)
+      END IF
+      CALL generateReport(register, className, schoolDate)
+    END IF
+    INPUT answer "Process another class? (Y/N)"
+    anotherClass <- (answer = "Y") OR (answer = "y")
+  UNTIL anotherClass = FALSE
+  DISPLAY "Goodbye"
+END MAIN
+loadRegister
+FUNCTION loadRegister(className) RETURNS Array of Student
+  IF className exists in storage THEN
+    RETURN the list of Student records for className
+  ELSE
+    RETURN empty array
+  END IF
+END FUNCTION
+recordAttendance and isValidCode
+PROCEDURE recordAttendance(register)
+  numPresent <- 0
+  numAbsent <- 0
+  numLate <- 0
+  absentList <- empty array
+  FOR i <- 0 TO length(register) - 1
+    REPEAT
+      INPUT code for register[i].fullName
+      code <- toUpperCase(code)
+      valid <- isValidCode(code)
+      IF valid = FALSE THEN
+        DISPLAY "Invalid code. Use P, A or L."
+      END IF
+    UNTIL valid = TRUE
+    IF code = "P" THEN
+      register[i].status <- "Present"
+      register[i].daysPresent <- register[i].daysPresent + 1
+      numPresent <- numPresent + 1
+    ELSE IF code = "A" THEN
+      register[i].status <- "Absent"
+      register[i].daysAbsent <- register[i].daysAbsent + 1
+      numAbsent <- numAbsent + 1
+      add register[i] to absentList
+    ELSE
+      register[i].status <- "Late"
+      register[i].daysLate <- register[i].daysLate + 1
+      numLate <- numLate + 1
+    END IF
+  END FOR
+  DISPLAY numPresent, numAbsent, numLate, absentList
+END PROCEDURE
+
+FUNCTION isValidCode(code) RETURNS Boolean
+  RETURN (code = "P") OR (code = "A") OR (code = "L")
+END FUNCTION
+calculateRate and analyseAttendance
+FUNCTION calculateRate(attended, totalDays) RETURNS Real
+  IF totalDays <= 0 THEN
+    RETURN 0
+  END IF
+  RETURN (attended / totalDays) * 100
+END FUNCTION
+
+FUNCTION analyseAttendance(register) RETURNS Array of Student
+  atRiskList <- empty array
+  FOR i <- 0 TO length(register) - 1
+    totalDays <- register[i].daysPresent + register[i].daysLate + register[i].daysAbsent
+    attended <- register[i].daysPresent + register[i].daysLate
+    register[i].rate <- calculateRate(attended, totalDays)
+    IF (register[i].rate < PRESENT_THRESHOLD) AND (totalDays > 0) THEN
+      register[i].isAtRisk <- TRUE
+      add register[i] to atRiskList
+    ELSE
+      register[i].isAtRisk <- FALSE
+    END IF
+  END FOR
+  RETURN atRiskList
+END FUNCTION
+notifyGuardians
+PROCEDURE notifyGuardians(atRiskList)
+  FOR EACH student IN atRiskList
+    IF student.guardianPhone <> "" THEN
+      message <- "Dear Guardian, " + student.fullName + "'s attendance is "
+                 + round(student.rate) + "%. Please contact the school."
+      queue message for student.guardianPhone
+      DISPLAY "Message queued for " + student.fullName
+    ELSE
+      DISPLAY "No phone number for " + student.fullName
+    END IF
+  END FOR
+END PROCEDURE
+generateReport
+PROCEDURE generateReport(register, className, schoolDate)
+  sumRates <- 0
+  atRiskCount <- 0
+  DISPLAY "ATTENDANCE REPORT", className, schoolDate
+  FOR i <- 0 TO length(register) - 1
+    totalDays <- register[i].daysPresent + register[i].daysLate + register[i].daysAbsent
+    sumRates <- sumRates + register[i].rate
+    IF register[i].isAtRisk = TRUE THEN
+      atRiskCount <- atRiskCount + 1
+    END IF
+    DISPLAY register[i].fullName, register[i].daysPresent, register[i].daysLate,
+            register[i].daysAbsent, round(register[i].rate), totalDays,
+            "of " + SCHOOL_DAYS_PER_WEEK + " days recorded"
+  END FOR
+  IF length(register) > 0 THEN
+    classAverage <- sumRates / length(register)
+  ELSE
+    classAverage <- 0
+  END IF
+  DISPLAY "Class average:", round(classAverage), "%"
+  DISPLAY "Pupils at risk:", atRiskCount
+END PROCEDURE
